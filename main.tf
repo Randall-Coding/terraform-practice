@@ -23,7 +23,7 @@ resource "local_file" "private_key_pem" {
 
 resource "aws_key_pair" "developer" {
   key_name   = "developer"
-  public_key = tls_private_key.generated.public_key_pem
+  public_key = tls_private_key.generated.public_key_openssh
 
   lifecycle {
     ignore_changes = [key_name]
@@ -153,8 +153,8 @@ resource "aws_instance" "web_server" {
     Owner = local.team
     App   = local.application
   }
-  key_name        = aws_key_pair.developer.key_name
-  security_groups = [aws_security_group.allow_ssh.id, aws_security_group.allow_web.id]
+  key_name               = aws_key_pair.developer.key_name
+  vpc_security_group_ids = [aws_security_group.allow_ssh.id, aws_security_group.allow_web.id]
 }
 
 resource "aws_security_group" "allow_web" {
@@ -163,21 +163,19 @@ resource "aws_security_group" "allow_web" {
   vpc_id      = aws_vpc.vpc.id
 
   ingress {
-    description      = "TLS from VPC"
-    from_port        = 443
-    to_port          = 443
-    protocol         = "tcp"
-    cidr_blocks      = [aws_vpc.vpc.cidr_block]
-    ipv6_cidr_blocks = [aws_vpc.vpc.ipv6_cidr_block]
+    description = "TLS from VPC"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
-    description      = "Http from VPC"
-    from_port        = 80
-    to_port          = 80
-    protocol         = "tcp"
-    cidr_blocks      = [aws_vpc.vpc.cidr_block]
-    ipv6_cidr_blocks = [aws_vpc.vpc.ipv6_cidr_block]
+    description = "Http from VPC"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -199,12 +197,11 @@ resource "aws_security_group" "allow_ssh" {
   vpc_id      = aws_vpc.vpc.id
 
   ingress {
-    description      = "ssh from VPC"
-    from_port        = 22
-    to_port          = 22
-    protocol         = "tcp"
-    cidr_blocks      = [aws_vpc.vpc.cidr_block]
-    ipv6_cidr_blocks = [aws_vpc.vpc.ipv6_cidr_block]
+    description = "ssh from VPC"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -286,4 +283,54 @@ resource "aws_subnet" "variables-subnet" {
     Name      = "sub-variables-${var.variables_sub_az}"
     Terraform = "true"
   }
+}
+
+# New webserver for Taint test
+resource "aws_instance" "web_server2" {
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = "t2.micro"
+  subnet_id     = aws_subnet.public_subnets["public_subnet_1"].id
+  vpc_security_group_ids = [aws_security_group.allow_ssh.id, aws_security_group.allow_web.id]
+  associate_public_ip_address = true
+  key_name                    = aws_key_pair.developer.key_name
+  connection {
+    user        = "ubuntu"
+    private_key = tls_private_key.generated.private_key_pem
+    host        = self.public_ip
+  }
+
+  # Leave the first part of the block unchanged and create our `local-exec` provisioner
+  provisioner "local-exec" {
+    command = "chmod 600 ${local_file.private_key_pem.filename}"
+  }
+  provisioner "remote-exec" {
+    inline = [
+      "sudo rm -rf /tmp",
+      "sudo git clone https://github.com/hashicorp/demo-terraform-101 /tmp",
+      "sudo sh /tmp/assets/setup-web.sh",
+    ]
+  }
+  tags = {
+    Name = "Web EC2 Server"
+  }
+  lifecycle {
+    ignore_changes = [security_groups]
+  }
+}
+
+resource "aws_instance" "aws_import" {
+  ami                                  = "ami-0c65adc9a5c1b5d7c"
+  instance_type                        = "t2.micro"
+  tags                                 = {
+        "Name" = "import-test"
+    }
+    tags_all                             = {
+        "Name" = "import-test"
+    }
+
+}
+
+
+output "web_server-ip" {
+  value = aws_instance.web_server.public_ip
 }
