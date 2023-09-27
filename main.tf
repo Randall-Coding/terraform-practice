@@ -1,6 +1,6 @@
 # Configure the AWS Provider
 provider "aws" {
-  region = "us-west-2"
+  region = "us-east-1"
 }
 
 #Retrieve the list of AZs in the current AWS region
@@ -274,23 +274,23 @@ resource "random_id" "randomness" {
 }
 
 # Static Values
-resource "aws_subnet" "variables-subnet" {
-  vpc_id                  = aws_vpc.vpc.id
-  cidr_block              = var.variables_sub_cidr
-  availability_zone       = var.variables_sub_az
-  map_public_ip_on_launch = var.variables_sub_auto_ip
-  tags = {
-    Name      = "sub-variables-${var.variables_sub_az}"
-    Terraform = "true"
-  }
-}
+# resource "aws_subnet" "variables-subnet" {
+#   vpc_id                  = aws_vpc.vpc.id
+#   cidr_block              = var.variables_sub_cidr
+#   availability_zone       = var.variables_sub_az
+#   map_public_ip_on_launch = var.variables_sub_auto_ip
+#   tags = {
+#     Name      = "sub-variables-${var.variables_sub_az}"
+#     Terraform = "true"
+#   }
+# }
 
 # New webserver for Taint test
 resource "aws_instance" "web_server2" {
-  ami           = data.aws_ami.ubuntu.id
-  instance_type = "t2.micro"
-  subnet_id     = aws_subnet.public_subnets["public_subnet_1"].id
-  vpc_security_group_ids = [aws_security_group.allow_ssh.id, aws_security_group.allow_web.id]
+  ami                         = data.aws_ami.ubuntu.id
+  instance_type               = "t2.micro"
+  subnet_id                   = aws_subnet.public_subnets["public_subnet_1"].id
+  vpc_security_group_ids      = [aws_security_group.allow_ssh.id, aws_security_group.allow_web.id]
   associate_public_ip_address = true
   key_name                    = aws_key_pair.developer.key_name
   connection {
@@ -318,18 +318,75 @@ resource "aws_instance" "web_server2" {
   }
 }
 
-resource "aws_instance" "aws_import" {
-  ami                                  = "ami-0c65adc9a5c1b5d7c"
-  instance_type                        = "t2.micro"
-  tags                                 = {
-        "Name" = "import-test"
-    }
-    tags_all                             = {
-        "Name" = "import-test"
-    }
+# resource "aws_instance" "aws_import" {
+#   ami                                  = data.aws_ami.ubuntu.id
+#   instance_type                        = "t2.micro"
+#   tags                                 = {
+#         "Name" = "import-test"
+#     }
+#     tags_all                             = {
+#         "Name" = "import-test"
+#     }
+# }
 
+module "server" {
+  source    = "./modules/server"
+  ami       = data.aws_ami.ubuntu.id
+  subnet_id = aws_subnet.public_subnets["public_subnet_3"].id
+  security_groups = [
+    aws_security_group.allow_ssh.id,
+    aws_security_group.allow_web.id
+  ]
 }
 
+module "server_subnet_1" {
+  source    = "./modules/web_server"
+  ami       = data.aws_ami.ubuntu.id
+  subnet_id = aws_subnet.public_subnets["public_subnet_1"].id
+  security_groups = [
+    aws_security_group.allow_ssh.id,
+    aws_security_group.allow_web.id
+  ]
+  user        = "ubuntu"
+  key_name    = aws_key_pair.developer.key_name
+  private_key = tls_private_key.generated.private_key_pem
+}
+
+# module "autoscaling" {
+#   source  = "terraform-aws-modules/autoscaling/aws"
+#   version = "6.10.0"
+#   # Autoscaling group
+#   name = "myasg"
+#   vpc_zone_identifier = [aws_subnet.private_subnets["private_subnet_1"].id,
+#     aws_subnet.private_subnets["private_subnet_2"].id,
+#     aws_subnet.private_subnets["private_subnet_3"].id
+#   ]
+#   min_size         = 0
+#   max_size         = 1
+#   desired_capacity = 1
+#   # Launch template
+#   # use_lt        = true
+#   # create_lt     = true
+#   image_id      = data.aws_ami.ubuntu.id
+#   instance_type = "t3.micro"
+#   tags = {
+#     Name = "Web EC2 Server 2"
+#   }
+# }
+
+output "public_ip_server_subnet_1" {
+  value = module.server_subnet_1.public_ip
+}
+output "public_dns_server_subnet_1" {
+  value = module.server_subnet_1.public_dns
+}
+
+output "public_ip" {
+  value = module.server.public_ip
+}
+output "public_dns" {
+  value = module.server.public_dns
+}
 
 output "web_server-ip" {
   value = aws_instance.web_server.public_ip
