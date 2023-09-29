@@ -24,12 +24,12 @@ terraform {
   #   }
   # }
 
-  # backend "remote" {
-  #   hostname = "app.terraform.io"
-  #   organization = "randallcoding"
+  backend "remote" {
+    hostname = "app.terraform.io"
+    organization = "randallcoding"
 
-  #   workspaces {
-  #     name = "example-workspace"
-  #   }
-  # }
+    workspaces {
+      name = "example-workspace"
+    }
+  }
 }

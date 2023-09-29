@@ -44,9 +44,9 @@ variable "variables_sub_auto_ip" {
 }
 
 variable "environment" {
-  type        = string
-  description = "Environment for deployment"
-  default     = "dev"
+  type = string
+  description = "Infrastructure environment. eg. dev, prod, etc"
+  default = "dev"
 }
 
 variable "us-east-1-azs" {
