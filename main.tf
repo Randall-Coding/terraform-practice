@@ -370,19 +370,19 @@ resource "aws_subnet" "list_subnet" {
 #   ]
 # }
 
-module "server_subnet_1" {
-  source    = "./modules/web_server"
-  ami       = data.aws_ami.ubuntu.id
-  subnet_id = aws_subnet.public_subnets["public_subnet_1"].id
-  security_groups = [
-    aws_security_group.allow_ssh.id,
-    aws_security_group.allow_web.id,
-    aws_security_group.main.id
-  ]
-  user        = "ubuntu"
-  key_name    = aws_key_pair.developer.key_name
-  private_key = tls_private_key.generated.private_key_pem
-}
+# module "server_subnet_1" {
+#   source    = "./modules/web_server"
+#   ami       = data.aws_ami.ubuntu.id
+#   subnet_id = aws_subnet.public_subnets["public_subnet_1"].id
+#   security_groups = [
+#     aws_security_group.allow_ssh.id,
+#     aws_security_group.allow_web.id,
+#     aws_security_group.main.id
+#   ]
+#   user        = "ubuntu"
+#   key_name    = aws_key_pair.developer.key_name
+#   private_key = tls_private_key.generated.private_key_pem
+# }
 
 # module "autoscaling" {
 #   source  = "terraform-aws-modules/autoscaling/aws"
