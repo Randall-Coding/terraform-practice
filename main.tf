@@ -36,7 +36,7 @@ resource "aws_vpc" "vpc" {
   tags = {
     Name        = var.vpc_name
     Environment = "demo_environment"
-    Terraform   = "true"
+    Terraform   = "true?"
     Region      = data.aws_region.current.name
   }
 }
@@ -237,6 +237,7 @@ resource "aws_s3_bucket" "my-new-S3-bucket" {
     Purpose = "Intro to Resource Blocks Lab"
   }
 }
+
 resource "aws_s3_bucket_ownership_controls" "my_new_bucket_acl" {
   bucket = aws_s3_bucket.my-new-S3-bucket.id
   rule {
@@ -245,8 +246,9 @@ resource "aws_s3_bucket_ownership_controls" "my_new_bucket_acl" {
 }
 
 resource "aws_s3_bucket_acl" "my-new-S3-bucket-acl" {
-  bucket = aws_s3_bucket.my-new-S3-bucket.id
-  acl    = "private"
+  bucket     = aws_s3_bucket.my-new-S3-bucket.id
+  acl        = "private"
+  depends_on = [aws_s3_bucket_ownership_controls.my_new_bucket_acl]
 }
 
 resource "aws_security_group" "ingress-443" {
@@ -269,8 +271,35 @@ resource "aws_security_group" "ingress-443" {
   }
 }
 
+resource "aws_security_group" "main" {
+  name = "main-global"
+
+  description = "AllowDoes nothing"
+  vpc_id      = aws_vpc.vpc.id
+
+  tags = {
+    Name    = "main"
+    Purpose = "Does nothing"
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
 resource "random_id" "randomness" {
   byte_length = 16
+}
+
+resource "aws_subnet" "list_subnet" {
+  for_each          = var.ip
+  vpc_id            = aws_vpc.vpc.id
+  cidr_block        = each.value
+  availability_zone = var.us-east-1-azs[0]
+  tags = {
+    Environment  = var.environment
+    "CIDR block" = each.value
+  }
 }
 
 # Static Values
@@ -286,37 +315,37 @@ resource "random_id" "randomness" {
 # }
 
 # New webserver for Taint test
-resource "aws_instance" "web_server2" {
-  ami                         = data.aws_ami.ubuntu.id
-  instance_type               = "t2.micro"
-  subnet_id                   = aws_subnet.public_subnets["public_subnet_1"].id
-  vpc_security_group_ids      = [aws_security_group.allow_ssh.id, aws_security_group.allow_web.id]
-  associate_public_ip_address = true
-  key_name                    = aws_key_pair.developer.key_name
-  connection {
-    user        = "ubuntu"
-    private_key = tls_private_key.generated.private_key_pem
-    host        = self.public_ip
-  }
+# resource "aws_instance" "web_server2" {
+#   ami                         = data.aws_ami.ubuntu.id
+#   instance_type               = "t2.micro"
+#   subnet_id                   = aws_subnet.public_subnets["public_subnet_1"].id
+#   vpc_security_group_ids      = [aws_security_group.allow_ssh.id, aws_security_group.allow_web.id]
+#   associate_public_ip_address = true
+#   key_name                    = aws_key_pair.developer.key_name
+#   connection {
+#     user        = "ubuntu"
+#     private_key = tls_private_key.generated.private_key_pem
+#     host        = self.public_ip
+#   }
 
-  # Leave the first part of the block unchanged and create our `local-exec` provisioner
-  provisioner "local-exec" {
-    command = "chmod 600 ${local_file.private_key_pem.filename}"
-  }
-  provisioner "remote-exec" {
-    inline = [
-      "sudo rm -rf /tmp",
-      "sudo git clone https://github.com/hashicorp/demo-terraform-101 /tmp",
-      "sudo sh /tmp/assets/setup-web.sh",
-    ]
-  }
-  tags = {
-    Name = "Web EC2 Server"
-  }
-  lifecycle {
-    ignore_changes = [security_groups]
-  }
-}
+#   # Leave the first part of the block unchanged and create our `local-exec` provisioner
+#   provisioner "local-exec" {
+#     command = "chmod 600 ${local_file.private_key_pem.filename}"
+#   }
+#   provisioner "remote-exec" {
+#     inline = [
+#       "sudo rm -rf /tmp",
+#       "sudo git clone https://github.com/hashicorp/demo-terraform-101 /tmp",
+#       "sudo sh /tmp/assets/setup-web.sh",
+#     ]
+#   }
+#   tags = {
+#     Name = "Web EC2 Server"
+#   }
+#   lifecycle {
+#     ignore_changes = [security_groups]
+#   }
+# }
 
 # resource "aws_instance" "aws_import" {
 #   ami                                  = data.aws_ami.ubuntu.id
@@ -329,15 +358,15 @@ resource "aws_instance" "web_server2" {
 #     }
 # }
 
-module "server" {
-  source    = "./modules/server"
-  ami       = data.aws_ami.ubuntu.id
-  subnet_id = aws_subnet.public_subnets["public_subnet_3"].id
-  security_groups = [
-    aws_security_group.allow_ssh.id,
-    aws_security_group.allow_web.id
-  ]
-}
+# module "server" {
+#   source    = "./modules/server"
+#   ami       = data.aws_ami.ubuntu.id
+#   subnet_id = aws_subnet.public_subnets["public_subnet_3"].id
+#   security_groups = [
+#     aws_security_group.allow_ssh.id,
+#     aws_security_group.allow_web.id
+#   ]
+# }
 
 module "server_subnet_1" {
   source    = "./modules/web_server"
@@ -345,7 +374,8 @@ module "server_subnet_1" {
   subnet_id = aws_subnet.public_subnets["public_subnet_1"].id
   security_groups = [
     aws_security_group.allow_ssh.id,
-    aws_security_group.allow_web.id
+    aws_security_group.allow_web.id,
+    aws_security_group.main.id
   ]
   user        = "ubuntu"
   key_name    = aws_key_pair.developer.key_name
@@ -374,20 +404,21 @@ module "server_subnet_1" {
 #   }
 # }
 
-output "public_ip_server_subnet_1" {
-  value = module.server_subnet_1.public_ip
-}
-output "public_dns_server_subnet_1" {
-  value = module.server_subnet_1.public_dns
-}
+# output "public_ip_server_subnet_1" {
+#   value = module.server_subnet_1.public_ip
+# }
+# output "public_dns_server_subnet_1" {
+#   value = module.server_subnet_1.public_dns
+# }
 
-output "public_ip" {
-  value = module.server.public_ip
-}
-output "public_dns" {
-  value = module.server.public_dns
-}
+# output "public_ip" {
+#   value = module.server.public_ip
+# }
+# output "public_dns" {
+#   value = module.server.public_dns
+# }
 
 output "web_server-ip" {
   value = aws_instance.web_server.public_ip
 }
+
