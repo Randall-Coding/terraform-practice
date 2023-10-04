@@ -11,6 +11,7 @@ locals {
   team        = "api_mgmt_dev"
   application = "corp_api"
   serve_name  = "ec2-${var.environment}-api-${var.variables_sub_az}"
+  az_names    = data.aws_availability_zones.available.names
 }
 
 resource "tls_private_key" "generated" {
@@ -43,31 +44,37 @@ resource "aws_vpc" "vpc" {
   enable_dns_hostnames = true
 }
 
-#Deploy the private subnets
-resource "aws_subnet" "private_subnets" {
-  for_each   = var.private_subnets
-  vpc_id     = aws_vpc.vpc.id
-  cidr_block = cidrsubnet(var.vpc_cidr, 8, each.value)
-  availability_zone = tolist(data.aws_availability_zones.available.names)[
-  each.value]
-  tags = {
-    Name      = each.key
-    Terraform = "true"
-  }
-}
 #Deploy the public subnets
 resource "aws_subnet" "public_subnets" {
   for_each   = var.public_subnets
   vpc_id     = aws_vpc.vpc.id
   cidr_block = cidrsubnet(var.vpc_cidr, 8, each.value + 100)
-  availability_zone = tolist(data.aws_availability_zones.available.
-  names)[each.value]
+  availability_zone = try(
+    local.az_names[each.value],
+    local.az_names[0],
+  )
   map_public_ip_on_launch = true
   tags = {
     Name      = each.key
     Terraform = "true"
   }
 }
+
+#Deploy the private subnets
+resource "aws_subnet" "private_subnets" {
+  for_each   = var.private_subnets
+  vpc_id     = aws_vpc.vpc.id
+  cidr_block = cidrsubnet(var.vpc_cidr, 8, each.value)
+  availability_zone = try(
+    local.az_names[each.value],
+    local.az_names[0]
+  )
+  tags = {
+    Name      = each.key
+    Terraform = "true"
+  }
+}
+
 #Create route tables for public and private subnets
 resource "aws_route_table" "public_route_table" {
   vpc_id = aws_vpc.vpc.id
@@ -370,19 +377,19 @@ resource "aws_subnet" "list_subnet" {
 #   ]
 # }
 
-module "server_subnet_1" {
-  source    = "./modules/web_server"
-  ami       = data.aws_ami.ubuntu.id
-  subnet_id = aws_subnet.public_subnets["public_subnet_1"].id
-  security_groups = [
-    aws_security_group.allow_ssh.id,
-    aws_security_group.allow_web.id,
-    aws_security_group.main.id
-  ]
-  user        = "ubuntu"
-  key_name    = aws_key_pair.developer.key_name
-  private_key = tls_private_key.generated.private_key_pem
-}
+# module "server_subnet_1" {
+#   source    = "./modules/web_server"
+#   ami       = data.aws_ami.ubuntu.id
+#   subnet_id = aws_subnet.public_subnets["public_subnet_1"].id
+#   security_groups = [
+#     aws_security_group.allow_ssh.id,
+#     aws_security_group.allow_web.id,
+#     aws_security_group.main.id
+#   ]
+#   user        = "ubuntu"
+#   key_name    = aws_key_pair.developer.key_name
+#   private_key = tls_private_key.generated.private_key_pem
+# }
 
 # module "autoscaling" {
 #   source  = "terraform-aws-modules/autoscaling/aws"
@@ -404,10 +411,19 @@ module "server_subnet_1" {
 #   tags = {
 #     Name = "Web EC2 Server 2"
 #   }
-# }
-
-# output "public_ip_server_subnet_1" {
-#   value = module.server_subnet_1.public_ip
+# }module "server_subnet_1" {
+#   source    = "./modules/web_server"
+#   ami       = data.aws_ami.ubuntu.id
+#   subnet_id = aws_subnet.public_subnets["public_subnet_1"].id
+#   security_groups = [
+#     aws_security_group.allow_ssh.id,
+#     aws_security_group.allow_web.id,
+#     aws_security_group.main.id
+#   ]
+#   user        = "ubuntu"
+#   key_name    = aws_key_pair.developer.key_name
+#   private_key = tls_private_key.generated.private_key_pem
+# }e.server_subnet_1.public_ip
 # }
 # output "public_dns_server_subnet_1" {
 #   value = module.server_subnet_1.public_dns
