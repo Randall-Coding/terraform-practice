@@ -6,6 +6,19 @@ provider "aws" {
 #Retrieve the list of AZs in the current AWS region
 data "aws_availability_zones" "available" {}
 data "aws_region" "current" {}
+# Terraform Data Block - To Lookup Latest Ubuntu 20.04 AMI Image
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
+  }
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+  owners = ["099720109477"]
+}
 
 locals {
   team        = "api_mgmt_dev"
@@ -75,6 +88,31 @@ resource "aws_subnet" "private_subnets" {
   }
 }
 
+#Create Internet Gateway
+resource "aws_internet_gateway" "internet_gateway" {
+  vpc_id = aws_vpc.vpc.id
+  tags = {
+    Name = "demo_igw"
+  }
+}
+#Create EIP for NAT Gateway
+resource "aws_eip" "nat_gateway_eip" {
+  domain     = "vpc"
+  depends_on = [aws_internet_gateway.internet_gateway]
+  tags = {
+    Name = "demo_igw_eip"
+  }
+}
+#Create NAT Gateway
+resource "aws_nat_gateway" "nat_gateway" {
+  depends_on    = [aws_subnet.public_subnets]
+  allocation_id = aws_eip.nat_gateway_eip.id
+  subnet_id     = aws_subnet.public_subnets["public_subnet_1"].id
+  tags = {
+    Name = "demo_nat_gateway"
+  }
+}
+
 #Create route tables for public and private subnets
 resource "aws_route_table" "public_route_table" {
   vpc_id = aws_vpc.vpc.id
@@ -112,44 +150,6 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private_route_table.id
   for_each       = aws_subnet.private_subnets
   subnet_id      = each.value.id
-}
-#Create Internet Gateway
-resource "aws_internet_gateway" "internet_gateway" {
-  vpc_id = aws_vpc.vpc.id
-  tags = {
-    Name = "demo_igw"
-  }
-}
-#Create EIP for NAT Gateway
-resource "aws_eip" "nat_gateway_eip" {
-  domain     = "vpc"
-  depends_on = [aws_internet_gateway.internet_gateway]
-  tags = {
-    Name = "demo_igw_eip"
-  }
-}
-#Create NAT Gateway
-resource "aws_nat_gateway" "nat_gateway" {
-  depends_on    = [aws_subnet.public_subnets]
-  allocation_id = aws_eip.nat_gateway_eip.id
-  subnet_id     = aws_subnet.public_subnets["public_subnet_1"].id
-  tags = {
-    Name = "demo_nat_gateway"
-  }
-}
-
-# Terraform Data Block - To Lookup Latest Ubuntu 20.04 AMI Image
-data "aws_ami" "ubuntu" {
-  most_recent = true
-  filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
-  }
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-  owners = ["099720109477"]
 }
 
 # Terraform Resource Block - To Build EC2 instance in Public Subnet
@@ -226,40 +226,6 @@ resource "aws_security_group" "allow_ssh" {
   }
 }
 
-# resource "aws_instance" "web" {
-#   # ami           = "ami-0261755bbcb8c4a84"   
-#   ami           = "ami-0c65adc9a5c1b5d7c"   
-#   instance_type = "t2.micro"
-#   subnet_id     =  aws_subnet.public_subnets["public_subnet_1"].id
-#   # vpc_security_group_ids = ["sg-0aad40876448a8090"]
-
-#   tags = {
-#     "Name" = "web resource"
-#     "Terraform" = "true"
-#   }
-# }
-
-resource "aws_s3_bucket" "my-new-S3-bucket" {
-  bucket = "my-new-tf-test-bucket-${random_id.randomness.hex}"
-  tags = {
-    Name    = "My S3 Bucket"
-    Purpose = "Intro to Resource Blocks Lab"
-  }
-}
-
-resource "aws_s3_bucket_ownership_controls" "my_new_bucket_acl" {
-  bucket = aws_s3_bucket.my-new-S3-bucket.id
-  rule {
-    object_ownership = "BucketOwnerPreferred"
-  }
-}
-
-resource "aws_s3_bucket_acl" "my-new-S3-bucket-acl" {
-  bucket     = aws_s3_bucket.my-new-S3-bucket.id
-  acl        = "private"
-  depends_on = [aws_s3_bucket_ownership_controls.my_new_bucket_acl]
-}
-
 resource "aws_security_group" "ingress-443" {
   name = "web_server_inbound"
 
@@ -296,6 +262,40 @@ resource "aws_security_group" "main" {
   }
 }
 
+# resource "aws_instance" "web" {
+#   # ami           = "ami-0261755bbcb8c4a84"   
+#   ami           = "ami-0c65adc9a5c1b5d7c"   
+#   instance_type = "t2.micro"
+#   subnet_id     =  aws_subnet.public_subnets["public_subnet_1"].id
+#   # vpc_security_group_ids = ["sg-0aad40876448a8090"]
+
+#   tags = {
+#     "Name" = "web resource"
+#     "Terraform" = "true"
+#   }
+# }
+
+resource "aws_s3_bucket" "my-new-S3-bucket" {
+  bucket = "my-new-tf-test-bucket-${random_id.randomness.hex}"
+  tags = {
+    Name    = "My S3 Bucket"
+    Purpose = "Intro to Resource Blocks Lab"
+  }
+}
+
+resource "aws_s3_bucket_ownership_controls" "my_new_bucket_acl" {
+  bucket = aws_s3_bucket.my-new-S3-bucket.id
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_acl" "my-new-S3-bucket-acl" {
+  bucket     = aws_s3_bucket.my-new-S3-bucket.id
+  acl        = "private"
+  depends_on = [aws_s3_bucket_ownership_controls.my_new_bucket_acl]
+}
+
 resource "random_id" "randomness" {
   byte_length = 16
 }
@@ -310,18 +310,6 @@ resource "aws_subnet" "list_subnet" {
     "CIDR block" = each.value
   }
 }
-
-# Static Values
-# resource "aws_subnet" "variables-subnet" {
-#   vpc_id                  = aws_vpc.vpc.id
-#   cidr_block              = var.variables_sub_cidr
-#   availability_zone       = var.variables_sub_az
-#   map_public_ip_on_launch = var.variables_sub_auto_ip
-#   tags = {
-#     Name      = "sub-variables-${var.variables_sub_az}"
-#     Terraform = "true"
-#   }
-# }
 
 # New webserver for Taint test
 # resource "aws_instance" "web_server2" {
@@ -354,17 +342,6 @@ resource "aws_subnet" "list_subnet" {
 #   lifecycle {
 #     ignore_changes = [security_groups]
 #   }
-# }
-
-# resource "aws_instance" "aws_import" {
-#   ami                                  = data.aws_ami.ubuntu.id
-#   instance_type                        = "t2.micro"
-#   tags                                 = {
-#         "Name" = "import-test"
-#     }
-#     tags_all                             = {
-#         "Name" = "import-test"
-#     }
 # }
 
 # module "server" {
