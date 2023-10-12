@@ -262,19 +262,6 @@ resource "aws_security_group" "main" {
   }
 }
 
-# resource "aws_instance" "web" {
-#   # ami           = "ami-0261755bbcb8c4a84"   
-#   ami           = "ami-0c65adc9a5c1b5d7c"   
-#   instance_type = "t2.micro"
-#   subnet_id     =  aws_subnet.public_subnets["public_subnet_1"].id
-#   # vpc_security_group_ids = ["sg-0aad40876448a8090"]
-
-#   tags = {
-#     "Name" = "web resource"
-#     "Terraform" = "true"
-#   }
-# }
-
 resource "aws_s3_bucket" "my-new-S3-bucket" {
   bucket = "my-new-tf-test-bucket-${random_id.randomness.hex}"
   tags = {
@@ -311,39 +298,6 @@ resource "aws_subnet" "list_subnet" {
   }
 }
 
-# New webserver for Taint test
-# resource "aws_instance" "web_server2" {
-#   ami                         = data.aws_ami.ubuntu.id
-#   instance_type               = "t2.micro"
-#   subnet_id                   = aws_subnet.public_subnets["public_subnet_1"].id
-#   vpc_security_group_ids      = [aws_security_group.allow_ssh.id, aws_security_group.allow_web.id]
-#   associate_public_ip_address = true
-#   key_name                    = aws_key_pair.developer.key_name
-#   connection {
-#     user        = "ubuntu"
-#     private_key = tls_private_key.generated.private_key_pem
-#     host        = self.public_ip
-#   }
-
-#   # Leave the first part of the block unchanged and create our `local-exec` provisioner
-#   provisioner "local-exec" {
-#     command = "chmod 600 ${local_file.private_key_pem.filename}"
-#   }
-#   provisioner "remote-exec" {
-#     inline = [
-#       "sudo rm -rf /tmp",
-#       "sudo git clone https://github.com/hashicorp/demo-terraform-101 /tmp",
-#       "sudo sh /tmp/assets/setup-web.sh",
-#     ]
-#   }
-#   tags = {
-#     Name = "Web EC2 Server"
-#   }
-#   lifecycle {
-#     ignore_changes = [security_groups]
-#   }
-# }
-
 # module "server" {
 #   source    = "./modules/server"
 #   ami       = data.aws_ami.ubuntu.id
@@ -352,20 +306,6 @@ resource "aws_subnet" "list_subnet" {
 #     aws_security_group.allow_ssh.id,
 #     aws_security_group.allow_web.id
 #   ]
-# }
-
-# module "server_subnet_1" {
-#   source    = "./modules/web_server"
-#   ami       = data.aws_ami.ubuntu.id
-#   subnet_id = aws_subnet.public_subnets["public_subnet_1"].id
-#   security_groups = [
-#     aws_security_group.allow_ssh.id,
-#     aws_security_group.allow_web.id,
-#     aws_security_group.main.id
-#   ]
-#   user        = "ubuntu"
-#   key_name    = aws_key_pair.developer.key_name
-#   private_key = tls_private_key.generated.private_key_pem
 # }
 
 # module "autoscaling" {
@@ -388,7 +328,9 @@ resource "aws_subnet" "list_subnet" {
 #   tags = {
 #     Name = "Web EC2 Server 2"
 #   }
-# }module "server_subnet_1" {
+# }
+
+# module "server_subnet_1" {
 #   source    = "./modules/web_server"
 #   ami       = data.aws_ami.ubuntu.id
 #   subnet_id = aws_subnet.public_subnets["public_subnet_1"].id
